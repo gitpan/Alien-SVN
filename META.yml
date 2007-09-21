@@ -1,6 +1,6 @@
 ---
 name: Alien-SVN
-version: 1.4.5.1
+version: 1.4.5.2
 author: []
 abstract: A wrapper for installing the SVN Perl bindings
 license: perl
@@ -14,7 +14,7 @@ build_requires:
 provides:
   Alien::SVN:
     file: lib/Alien/SVN.pm
-    version: 1.4.5.1
+    version: 1.4.5.2
   SVN::Base:
     file: src/subversion-1.4.5/subversion/bindings/swig/perl/native/Base.pm
   SVN::Client:
