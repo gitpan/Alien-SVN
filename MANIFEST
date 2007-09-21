@@ -1,4 +1,5 @@
 Build.PL
+Changes
 inc/My/SVN/Builder.pm
 lib/Alien/SVN.pm
 MANIFEST
@@ -1299,5 +1300,4 @@ src/subversion-1.4.5/www/user-classifications.html
 src/subversion-1.4.5/www/validate.sh
 src/subversion-1.4.5/www/variance-adjusted-patching.html
 src/subversion-1.4.5/www/webdav-usage.html
-Makefile.PL
 META.yml

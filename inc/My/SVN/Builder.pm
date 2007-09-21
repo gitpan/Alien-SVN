@@ -1,11 +1,15 @@
 package My::SVN::Builder;
 
+use File::Basename;
+
 use base 'Module::Build';
 
 use Cwd;
 
 sub _run {
-    my($prog, @args) = @_;
+    my($self, $prog, @args) = @_;
+    
+    $prog = $self->{your_make} if $prog eq 'make';
     
     print "Running $prog @args\n";
     return system($prog, @args) == 0 ? 1 : 0;
@@ -23,6 +27,26 @@ sub _chdir_to_native {
 
 sub _chdir_back {
     chdir $Orig_CWD;
+}
+
+
+sub _svn_provides {
+    my $class = shift;
+    
+    my @pms = <src/subversion-1.4.5/subversion/bindings/swig/perl/native/*.pm>;
+
+    my %provides;
+    for my $pm (@pms) {
+        my $module = 'SVN::' . basename($pm, ".pm");
+
+        $provides{$module} = { file => $pm };
+    }
+    
+    $provides{"SVN::Core"}{version} = '1.4.5';
+
+    _chdir_back;
+    
+    return \%provides;
 }
 
 
@@ -71,7 +95,7 @@ sub _run_svn_configure {
     
     _chdir_to_svn;
     
-    _run("./configure", $self->_configure_args)
+    $self->_run("./configure", $self->_configure_args)
         or do { warn "configuring SVN failed";      return 0 };
     
     _chdir_back;
@@ -84,20 +108,22 @@ sub ACTION_code {
 
     _chdir_to_svn;
 
-    _run("make swig-pl-lib")
+    $self->_run('make')
+        or do { warn "building subversion failed"; return 0 };
+    $self->_run("make swig-pl-lib")
         or do { warn "building swig-pl-lib failed"; return 0 };
 
     _chdir_back;
     _chdir_to_native;
 
-    _run("perl", "Makefile.PL", $self->_makemaker_args)
+    $self->_run("perl", "Makefile.PL", $self->_makemaker_args)
         or do { warn "running Makefile.PL failed"; return 0 };
-    _run("make") or do { warn "building SV::Core failed"; return 0 };
+    $self->_run("make") or do { warn "building SV::Core failed"; return 0 };
     
     _chdir_back;
     _chdir_to_svn;
     
-    _run("make swig-pl")
+    $self->_run("make swig-pl")
         or do { warn "building swig-pl failed"; return 0 };
     
     _chdir_back;
@@ -111,7 +137,7 @@ sub ACTION_test {
     
     _chdir_to_native;
     
-    my $test_status = _run("make test");
+    my $test_status = $self->_run("make test");
     
     _chdir_back;
     
@@ -124,13 +150,16 @@ sub ACTION_install {
     
     _chdir_to_svn;
 
-    _run("make install-swig-pl-lib")
+    $self->_run("make install-lib")
+        or do { warn "installing libs failed"; return 0 };
+
+    $self->_run("make install-swig-pl-lib")
         or do { warn "installing swig-pl-lib failed"; return 0 };
 
     _chdir_back;
     _chdir_to_native;
     
-    _run("make install")
+    $self->_run("make install")
         or do { warn "installing SVN::Core failed"; return 0 };
     
     _chdir_back;
