@@ -58,12 +58,18 @@ if( -e 'src/subversion-1.4.5/config.status' ) {
 }
 else {
     $run_configure = $build->prompt(
-        "Run Subversion's configure now?",
-        $ENV{PERL_RELEASING} ? 'n' : 'y'
+        "Run Subversion's configure now?", 'y'
     );
 }
 
 if( $run_configure =~ /^y/i ) {
+    my $configure_args = $build->prompt(
+        "\n\nWould you like to pass any arguments to configure?", 
+        $build->_default_configure_args
+    );
+
+    $build->notes("configure_args", $configure_args);
+
     print "\n\nSubversion will now be configured.\n\n";
     sleep 1;
 
