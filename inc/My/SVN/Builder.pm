@@ -5,6 +5,7 @@ use File::Basename;
 use base 'Module::Build';
 
 use Cwd;
+use Config;
 
 sub _run {
     my($self, $prog, @args) = @_;
@@ -17,7 +18,7 @@ sub _run {
 
 my $Orig_CWD = cwd;
 sub _chdir_to_svn {
-    chdir 'src/subversion-1.4.5' or die $!;
+    chdir 'src/subversion' or die $!;
 }
 
 sub _chdir_to_native {
@@ -33,7 +34,7 @@ sub _chdir_back {
 sub _svn_provides {
     my $class = shift;
     
-    my @pms = <src/subversion-1.4.5/subversion/bindings/swig/perl/native/*.pm>;
+    my @pms = <src/subversion/subversion/bindings/swig/perl/native/*.pm>;
 
     my %provides;
     for my $pm (@pms) {
@@ -42,7 +43,7 @@ sub _svn_provides {
         $provides{$module} = { file => $pm };
     }
     
-    $provides{"SVN::Core"}{version} = '1.4.5';
+    $provides{"SVN::Core"}{version} = '1.4.6';
 
     _chdir_back;
     
@@ -84,13 +85,18 @@ sub _default_configure_args {
     my $self = shift;
 
     my $props = $self->{properties};
-    my $prefix = $props->{install_base} || $props->{prefix};
+    my $prefix = $props->{install_base} || 
+                 $props->{prefix}       ||
+                 $Config{siteprefix};
+
+    my %args = (
+        prefix => $prefix,
+        libdir => File::Spec->catdir(
+            $self->install_destination('arch'), 'Alien', 'SVN'
+        ),
+    );
     
-    my @args;
-    push @args, "--prefix=\Q$prefix" if $prefix;
-    push @args, "--with-perl5=\Q$^X";
-    
-    return join ' ', @args;
+    return join ' ', map { "--$_=$args{$_}" } sort keys %args;
 }
 
 sub _run_svn_configure {
@@ -98,7 +104,7 @@ sub _run_svn_configure {
     
     _chdir_to_svn;
     
-    $self->_run("sh", "configure", $self->notes("configure_args"))
+    $self->_run("sh configure \Q@{[$self->notes('configure_args')]}")
         or do { warn "configuring SVN failed";      return 0 };
     
     _chdir_back;
@@ -119,7 +125,7 @@ sub ACTION_code {
     _chdir_back;
     _chdir_to_native;
 
-    $self->_run("perl", "Makefile.PL", $self->_makemaker_args)
+    $self->_run($^X, "Makefile.PL", $self->_makemaker_args)
         or do { warn "running Makefile.PL failed"; return 0 };
     $self->_run("make") or do { warn "building SV::Core failed"; return 0 };
     
