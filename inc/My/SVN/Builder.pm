@@ -43,7 +43,7 @@ sub _svn_provides {
         $provides{$module} = { file => $pm };
     }
     
-    $provides{"SVN::Core"}{version} = '1.4.6';
+    $provides{"SVN::Core"}{version} = '1.6.12';
 
     _chdir_back;
     
@@ -90,13 +90,14 @@ sub _default_configure_args {
                  $Config{siteprefix};
 
     my %args = (
-        prefix => $prefix,
-        libdir => File::Spec->catdir(
+        '--prefix' => $prefix,
+        '--libdir' => File::Spec->catdir(
             $self->install_destination('arch'), 'Alien', 'SVN'
         ),
+        PERL   => $^X,
     );
-    
-    return join ' ', map { "--$_=$args{$_}" } sort keys %args;
+
+    return join ' ', map { "$_=$args{$_}" } sort keys %args;
 }
 
 sub _run_svn_configure {
@@ -104,7 +105,7 @@ sub _run_svn_configure {
     
     _chdir_to_svn;
     
-    $self->_run("sh configure \Q@{[$self->notes('configure_args')]}")
+    $self->_run("sh configure @{[$self->notes('configure_args')]}")
         or do { warn "configuring SVN failed";      return 0 };
     
     _chdir_back;

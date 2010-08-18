@@ -20,7 +20,7 @@
 
 #include <stdlib.h>
 #include <limits.h>
-#include <assert.h>
+#include <apr_version.h>
 #include <apr_pools.h>
 #include <apr_hash.h>
 #include <apr_file_io.h>
@@ -31,10 +31,11 @@
 #include "svn_sorts.h"
 #include "svn_io.h"
 #include "svn_pools.h"
+#include "private/svn_dep_compat.h"
 
 
 
-/* 
+/*
  * The format of a dumped hash table is:
  *
  *   K <nlength>
@@ -62,7 +63,7 @@
  *   be pleased to note the familiar, subtle hints of mulberries and
  *   carburator fluid.  Its confident finish is marred only by a barely
  *   detectable suggestion of rancid squid ink.
- *   K 5 
+ *   K 5
  *   price
  *   V 8
  *   US $6.50
@@ -84,16 +85,19 @@ hash_read(apr_hash_t *hash, svn_stream_t *stream, const char *terminator,
   svn_boolean_t eof;
   apr_size_t len, keylen, vallen;
   char c, *end, *keybuf, *valbuf;
+  apr_pool_t *iterpool = svn_pool_create(pool);
 
   while (1)
     {
+      svn_pool_clear(iterpool);
+
       /* Read a key length line.  Might be END, though. */
-      SVN_ERR(svn_stream_readline(stream, &buf, "\n", &eof, pool));
+      SVN_ERR(svn_stream_readline(stream, &buf, "\n", &eof, iterpool));
 
       /* Check for the end of the hash. */
       if ((!terminator && eof && buf->len == 0)
           || (terminator && (strcmp(buf->data, terminator) == 0)))
-        return SVN_NO_ERROR;
+        break;
 
       /* Check for unexpected end of stream */
       if (eof)
@@ -118,7 +122,7 @@ hash_read(apr_hash_t *hash, svn_stream_t *stream, const char *terminator,
             return svn_error_create(SVN_ERR_MALFORMED_FILE, NULL, NULL);
 
           /* Read a val length line */
-          SVN_ERR(svn_stream_readline(stream, &buf, "\n", &eof, pool));
+          SVN_ERR(svn_stream_readline(stream, &buf, "\n", &eof, iterpool));
 
           if ((buf->data[0] == 'V') && (buf->data[1] == ' '))
             {
@@ -126,7 +130,7 @@ hash_read(apr_hash_t *hash, svn_stream_t *stream, const char *terminator,
               if (vallen == (size_t) ULONG_MAX || *end != '\0')
                 return svn_error_create(SVN_ERR_MALFORMED_FILE, NULL, NULL);
 
-              valbuf = apr_palloc(pool, vallen + 1);
+              valbuf = apr_palloc(iterpool, vallen + 1);
               SVN_ERR(svn_stream_read(stream, valbuf, &vallen));
               valbuf[vallen] = '\0';
 
@@ -152,7 +156,7 @@ hash_read(apr_hash_t *hash, svn_stream_t *stream, const char *terminator,
             return svn_error_create(SVN_ERR_MALFORMED_FILE, NULL, NULL);
 
           /* Now read that much into a buffer. */
-          keybuf = apr_palloc(pool, keylen + 1);
+          keybuf = apr_palloc(iterpool, keylen + 1);
           SVN_ERR(svn_stream_read(stream, keybuf, &keylen));
           keybuf[keylen] = '\0';
 
@@ -166,8 +170,13 @@ hash_read(apr_hash_t *hash, svn_stream_t *stream, const char *terminator,
           apr_hash_set(hash, keybuf, keylen, NULL);
         }
       else
-        return svn_error_create(SVN_ERR_MALFORMED_FILE, NULL, NULL);
+        {
+          return svn_error_create(SVN_ERR_MALFORMED_FILE, NULL, NULL);
+        }
     }
+
+  svn_pool_destroy(iterpool);
+  return SVN_NO_ERROR;
 }
 
 
@@ -267,7 +276,7 @@ svn_hash_write_incremental(apr_hash_t *hash, apr_hash_t *oldhash,
                            svn_stream_t *stream, const char *terminator,
                            apr_pool_t *pool)
 {
-  assert(oldhash != NULL);
+  SVN_ERR_ASSERT(oldhash != NULL);
   return hash_write(hash, oldhash, stream, terminator, pool);
 }
 
@@ -275,7 +284,7 @@ svn_hash_write_incremental(apr_hash_t *hash, apr_hash_t *oldhash,
 svn_error_t *
 svn_hash_write(apr_hash_t *hash, apr_file_t *destfile, apr_pool_t *pool)
 {
-  return hash_write(hash, NULL, svn_stream_from_aprfile(destfile, pool),
+  return hash_write(hash, NULL, svn_stream_from_aprfile2(destfile, TRUE, pool),
                     SVN_HASH_TERMINATOR, pool);
 }
 
@@ -283,7 +292,7 @@ svn_hash_write(apr_hash_t *hash, apr_file_t *destfile, apr_pool_t *pool)
 /* There are enough quirks in the deprecated svn_hash_read that we
    should just preserve its implementation. */
 svn_error_t *
-svn_hash_read(apr_hash_t *hash, 
+svn_hash_read(apr_hash_t *hash,
               apr_file_t *srcfile,
               apr_pool_t *pool)
 {
@@ -292,7 +301,7 @@ svn_hash_read(apr_hash_t *hash,
   apr_size_t num_read;
   char c;
   int first_time = 1;
-  
+
 
   while (1)
     {
@@ -303,7 +312,7 @@ svn_hash_read(apr_hash_t *hash,
       if (err && APR_STATUS_IS_EOF(err->apr_err) && first_time)
         {
           /* We got an EOF on our very first attempt to read, which
-             means it's a zero-byte file.  No problem, just go home. */        
+             means it's a zero-byte file.  No problem, just go home. */
           svn_error_clear(err);
           return SVN_NO_ERROR;
         }
@@ -335,13 +344,13 @@ svn_hash_read(apr_hash_t *hash,
 
           /* Now read that much into a buffer, + 1 byte for null terminator */
           void *keybuf = apr_palloc(pool, keylen + 1);
-          SVN_ERR(svn_io_file_read_full(srcfile, 
+          SVN_ERR(svn_io_file_read_full(srcfile,
                                         keybuf, keylen, &num_read, pool));
           ((char *) keybuf)[keylen] = '\0';
 
           /* Suck up extra newline after key data */
           SVN_ERR(svn_io_file_getc(&c, srcfile, pool));
-          if (c != '\n') 
+          if (c != '\n')
             return svn_error_create(SVN_ERR_MALFORMED_FILE, NULL, NULL);
 
           /* Read a val length line */
@@ -353,12 +362,12 @@ svn_hash_read(apr_hash_t *hash,
               svn_string_t *value = apr_palloc(pool, sizeof(*value));
 
               /* Get the length of the value */
-              int vallen = atoi(buf + 2);
+              apr_size_t vallen = atoi(buf + 2);
 
               /* Again, 1 extra byte for the null termination. */
               void *valbuf = apr_palloc(pool, vallen + 1);
-              SVN_ERR(svn_io_file_read_full(srcfile, 
-                                            valbuf, vallen, 
+              SVN_ERR(svn_io_file_read_full(srcfile,
+                                            valbuf, vallen,
                                             &num_read, pool));
               ((char *) valbuf)[vallen] = '\0';
 
@@ -403,9 +412,9 @@ svn_hash_diff(apr_hash_t *hash_a,
       {
         const void *key;
         apr_ssize_t klen;
-        
+
         apr_hash_this(hi, &key, &klen, NULL);
-        
+
         if (hash_b && (apr_hash_get(hash_b, key, klen)))
           SVN_ERR((*diff_func)(key, klen, svn_hash_diff_key_both,
                                diff_func_baton));
@@ -419,13 +428,77 @@ svn_hash_diff(apr_hash_t *hash_a,
       {
         const void *key;
         apr_ssize_t klen;
-        
+
         apr_hash_this(hi, &key, &klen, NULL);
-        
+
         if (! (hash_a && apr_hash_get(hash_a, key, klen)))
           SVN_ERR((*diff_func)(key, klen, svn_hash_diff_key_b,
                                diff_func_baton));
       }
 
+  return SVN_NO_ERROR;
+}
+
+
+/*** Misc. hash APIs ***/
+
+svn_error_t *
+svn_hash_keys(apr_array_header_t **array,
+              apr_hash_t *hash,
+              apr_pool_t *pool)
+{
+  apr_hash_index_t *hi;
+
+  *array = apr_array_make(pool, apr_hash_count(hash), sizeof(const char *));
+
+  for (hi = apr_hash_first(pool, hash); hi; hi = apr_hash_next(hi))
+    {
+      const void *key;
+      const char *path;
+
+      apr_hash_this(hi, &key, NULL, NULL);
+      path = key;
+
+      APR_ARRAY_PUSH(*array, const char *) = path;
+    }
+
+  return SVN_NO_ERROR;
+}
+
+
+svn_error_t *
+svn_hash_from_cstring_keys(apr_hash_t **hash_p,
+                           const apr_array_header_t *keys,
+                           apr_pool_t *pool)
+{
+  int i;
+  apr_hash_t *hash = apr_hash_make(pool);
+  for (i = 0; i < keys->nelts; i++)
+    {
+      const char *key =
+        apr_pstrdup(pool, APR_ARRAY_IDX(keys, i, const char *));
+      apr_hash_set(hash, key, APR_HASH_KEY_STRING, key);
+    }
+  *hash_p = hash;
+  return SVN_NO_ERROR;
+}
+
+
+svn_error_t *
+svn_hash__clear(apr_hash_t *hash)
+{
+#if APR_VERSION_AT_LEAST(1, 3, 0)
+  apr_hash_clear(hash);
+#else
+  apr_hash_index_t *hi;
+  const void *key;
+  apr_ssize_t klen;
+
+  for (hi = apr_hash_first(NULL, hash); hi; hi = apr_hash_next(hi))
+    {
+      apr_hash_this(hi, &key, &klen, NULL);
+      apr_hash_set(hash, key, klen, NULL);
+    }
+#endif
   return SVN_NO_ERROR;
 }

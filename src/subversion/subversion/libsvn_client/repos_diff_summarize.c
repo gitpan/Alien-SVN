@@ -118,7 +118,7 @@ open_root(void *edit_baton,
           void **root_baton)
 {
   struct item_baton *ib = create_item_baton(edit_baton, "",
-                                            svn_node_dir, pool);;
+                                            svn_node_dir, pool);
 
   *root_baton = ib;
   return SVN_NO_ERROR;
@@ -148,9 +148,7 @@ delete_entry(const char *path,
   sum->path = path;
   sum->node_kind = kind;
 
-  SVN_ERR(eb->summarize_func(sum, eb->summarize_func_baton, pool));
-
-  return SVN_NO_ERROR;
+  return eb->summarize_func(sum, eb->summarize_func_baton, pool);
 }
 
 /* An editor function.  */
@@ -198,7 +196,7 @@ close_directory(void *dir_baton,
 {
   struct item_baton *ib = dir_baton;
   struct edit_baton *eb = ib->edit_baton;
-  
+
   if (ib->summarize)
     SVN_ERR(eb->summarize_func(ib->summarize, eb->summarize_func_baton,
                                pool));
@@ -337,9 +335,7 @@ svn_client__get_diff_summarize_editor(const char *target,
   tree_editor->change_file_prop = change_prop;
   tree_editor->close_file = close_file;
 
-  SVN_ERR(svn_delta_get_cancellation_editor
-          (cancel_func, cancel_baton, tree_editor, eb, editor, edit_baton,
-           pool));
-
-  return SVN_NO_ERROR;
+  return svn_delta_get_cancellation_editor(cancel_func, cancel_baton,
+                                           tree_editor, eb, editor, edit_baton,
+                                           pool);
 }
