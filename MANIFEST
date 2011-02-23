@@ -1616,3 +1616,4 @@ src/subversion/tools/xslt/svnindex.css
 src/subversion/tools/xslt/svnindex.xsl
 src/subversion/TRANSLATING
 src/subversion/win-tests.py
+SIGNATURE    Added here by Module::Build
